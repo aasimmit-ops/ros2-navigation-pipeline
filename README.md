@@ -133,7 +133,7 @@ To deploy on a real TurtleBot3:
 
 ## 7. AI Tools Used
 
-AI tools were used for:
+AI tools were used for:(ChatGpt)
 
 - Code structuring and debugging support  
 - Algorithm validation  
