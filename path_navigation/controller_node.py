@@ -69,20 +69,31 @@ class ControllerNode(Node):
     # Callbacks
     # -----------------------------
     def trajectory_callback(self, msg):
-        self.trajectory = msg.poses
+        if msg.poses is None or len(msg.poses) == 0:
+            self.get_logger().warn("Received empty trajectory.")
+            self.trajectory = []
+        else:
+            self.trajectory = msg.poses
 
     def odom_callback(self, msg):
         self.current_pose = msg.pose.pose
 
     def scan_callback(self, msg):
-        # Check front 60 degrees of scan
+
+        if msg.ranges is None or len(msg.ranges) == 0:
+            self.obstacle_detected = False
+            return
+
         total_ranges = len(msg.ranges)
         center = total_ranges // 2
         window = total_ranges // 6  # ~60 degree sector
 
-        front_ranges = msg.ranges[center - window : center + window]
+        front_ranges = msg.ranges[center - window: center + window]
 
-        valid_ranges = [r for r in front_ranges if not np.isinf(r)]
+        valid_ranges = [
+            r for r in front_ranges
+            if not np.isinf(r) and not np.isnan(r)
+        ]
 
         if len(valid_ranges) == 0:
             self.obstacle_detected = False
@@ -98,7 +109,20 @@ class ControllerNode(Node):
     # -----------------------------
     def control_loop(self):
 
-        if self.current_pose is None or len(self.trajectory) == 0:
+        # -----------------------------
+        # SAFETY CHECKS
+        # -----------------------------
+        if self.lookahead_distance <= 0:
+            self.get_logger().error("Lookahead distance must be positive.")
+            return
+
+        if self.current_pose is None:
+            self.get_logger().warn("Waiting for odometry...")
+            return
+
+        if len(self.trajectory) == 0:
+            self.get_logger().warn("No trajectory available. Stopping robot.")
+            self.publish_stop()
             return
 
         # -----------------------------
@@ -118,6 +142,7 @@ class ControllerNode(Node):
         robot_y = self.current_pose.position.y
 
         orientation_q = self.current_pose.orientation
+
         siny_cosp = 2 * (orientation_q.w * orientation_q.z)
         cosy_cosp = 1 - 2 * (orientation_q.z * orientation_q.z)
         theta = math.atan2(siny_cosp, cosy_cosp)
@@ -133,12 +158,10 @@ class ControllerNode(Node):
                 target = pose
                 break
 
-        # If no target → stop
+        # If no target → stop safely
         if target is None:
-            cmd = Twist()
-            cmd.linear.x = 0.0
-            cmd.angular.z = 0.0
-            self.cmd_pub.publish(cmd)
+            self.get_logger().info("Reached end of trajectory.")
+            self.publish_stop()
             return
 
         dx = target.pose.position.x - robot_x
@@ -147,6 +170,11 @@ class ControllerNode(Node):
         # Transform to robot frame
         x_r = math.cos(theta) * dx + math.sin(theta) * dy
         y_r = -math.sin(theta) * dx + math.cos(theta) * dy
+
+        # Safe curvature calculation
+        if self.lookahead_distance == 0:
+            self.publish_stop()
+            return
 
         curvature = (2 * y_r) / (self.lookahead_distance ** 2)
         angular_velocity = self.linear_velocity * curvature
@@ -161,6 +189,15 @@ class ControllerNode(Node):
         cmd.linear.x = self.linear_velocity
         cmd.angular.z = angular_velocity
 
+        self.cmd_pub.publish(cmd)
+
+    # -----------------------------
+    # Helper Function
+    # -----------------------------
+    def publish_stop(self):
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
         self.cmd_pub.publish(cmd)
 
 
