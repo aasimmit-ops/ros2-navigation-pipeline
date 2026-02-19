@@ -181,6 +181,62 @@ path_navigation/
 
 ---
 
+## 11. Testability & Quality Assurance
+
+### Test Case Design
+
+The following scenarios were tested:
+
+1. Straight Line Tracking  
+   - Robot follows a linear path  
+   - Expected: minimal angular velocity  
+
+2. Curved Path Tracking  
+   - Robot follows a smooth curve  
+   - Expected: stable curvature response  
+
+3. Empty Trajectory  
+   - No path published  
+   - Expected: robot stops safely  
+
+4. Invalid Lookahead Distance  
+   - Zero or negative value  
+   - Expected: controller does not compute curvature  
+
+5. Angular Velocity Saturation  
+   - High curvature input  
+   - Expected: velocity limited to max value  
+
+---
+
+### Test Automation
+
+Unit tests were implemented to verify:
+
+- Curvature calculation logic  
+- Handling of invalid parameters  
+- Mathematical correctness  
+
+Tests can be run using:
+
+```bash
+pytest
+```
+
+---
+
+### Error Handling
+
+The controller includes:
+
+- Validation of lookahead distance  
+- Safe stop if no trajectory available  
+- Warnings if odometry is missing  
+- Protection against division by zero  
+
+These ensure robustness and predictable behavior.
+
+
 
 
 
